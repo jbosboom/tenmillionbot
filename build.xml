@@ -1,0 +1,78 @@
+<!--
+/*
+ * Copyright 2015 Jeffrey Bosboom.
+ * This file is part of tenmillionbot.
+ *
+ * tenmillionbot is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * tenmillionbot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with tenmillionbot.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ -->
+
+<project name="tenmillionbot" basedir="." default="jar">
+	<target name="fetch">
+		<mkdir dir="lib"/>
+		<mkdir dir="lib/doc"/>
+		<mkdir dir="lib/src"/>
+
+		<!-- use a local windowlib jar if available -->
+		<copy file="../windowlib/build/jar/windowlib.jar"
+			  tofile="lib/windowlib.jar"
+			  failonerror="false" quiet="true" />
+		<get src="https://github.com/jbosboom/windowlib/releases/download/20141121/windowlib.jar"
+			 dest="lib/windowlib.jar"
+			 skipexisting="true"/>
+
+		<get src="http://search.maven.org/remotecontent?filepath=com/nativelibs4java/bridj/0.6.2/bridj-0.6.2-c-only.jar"
+			 dest="lib/bridj.jar"
+			 skipexisting="true"/>
+		<get src="http://search.maven.org/remotecontent?filepath=com/nativelibs4java/bridj/0.6.2/bridj-0.6.2-javadoc.jar"
+			 dest="lib/doc/bridj-doc.jar"
+			 skipexisting="true"/>
+		<get src="http://search.maven.org/remotecontent?filepath=com/nativelibs4java/bridj/0.6.2/bridj-0.6.2-sources.jar"
+			 dest="lib/src/bridj-src.jar"
+			 skipexisting="true"/>
+
+		<get src="http://search.maven.org/remotecontent?filepath=com/google/guava/guava/18.0/guava-18.0.jar"
+			 dest="lib/guava.jar"
+			 skipexisting="true"/>
+		<get src="http://search.maven.org/remotecontent?filepath=com/google/guava/guava/18.0/guava-18.0-javadoc.jar"
+			 dest="lib/doc/guava-doc.jar"
+			 skipexisting="true"/>
+		<get src="http://search.maven.org/remotecontent?filepath=com/google/guava/guava/18.0/guava-18.0-sources.jar"
+			 dest="lib/src/guava-src.jar"
+			 skipexisting="true"/>
+	</target>
+
+	<target name="clean">
+		<delete dir="build"/>
+	</target>
+
+	<target name="compile">
+		<mkdir dir="build/classes"/>
+		<javac srcdir="src" destdir="build/classes" debug="true" includeantruntime="false">
+			<classpath>
+				<fileset dir="lib">
+					<include name="*.jar"/>
+				</fileset>
+			</classpath>
+		</javac>
+	</target>
+
+	<target name="jar" depends="compile">
+		<mkdir dir="build/jar"/>
+		<jar destfile="build/jar/tenmillionbot.jar" basedir="build/classes">
+		</jar>
+	</target>
+
+	<target name="clean-build" depends="clean,jar"/>
+</project>

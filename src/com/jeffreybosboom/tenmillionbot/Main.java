@@ -63,15 +63,22 @@ public final class Main {
 	private static int[] horizMatch(Tile[][] board) {
 		for (int i = 0; i < board.length; ++i) {
 			for (int j = 0; j < board[i].length - 1; ++j) {
-				if (board[i][j] == null || board[i][j] != board[i][j+1]) continue;
-				if ((j - 1) >= 0)
+				if (board[i][j] == null) continue;
+				if ((j + 2) < board[i].length && board[i][j] == board[i][j+2]) {
 					for (int k = 0; k < board.length; ++k)
-						if (board[k][j-1] == board[i][j] || board[k][j-1] == Tile.RAINBOW)
-							return new int[]{k, j-1, i, j-1};
-				if ((j + 2) < board[i].length)
-					for (int k = 0; k < board.length; ++k)
-						if (board[k][j+2] == board[i][j] || board[k][j+2] == Tile.RAINBOW)
-							return new int[]{k, j+2, i, j+2};
+						if (board[k][j+1] == board[i][j] || board[k][j+1] == Tile.RAINBOW)
+							return new int[]{k, j+1, i, j+1};
+				}
+				if (board[i][j] == board[i][j+1]) {
+					if ((j - 1) >= 0)
+						for (int k = 0; k < board.length; ++k)
+							if (board[k][j-1] == board[i][j] || board[k][j-1] == Tile.RAINBOW)
+								return new int[]{k, j-1, i, j-1};
+					if ((j + 2) < board[i].length)
+						for (int k = 0; k < board.length; ++k)
+							if (board[k][j+2] == board[i][j] || board[k][j+2] == Tile.RAINBOW)
+								return new int[]{k, j+2, i, j+2};
+				}
 			}
 		}
 		return null;

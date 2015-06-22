@@ -23,6 +23,7 @@ import java.awt.AWTException;
 import java.awt.Rectangle;
 import java.awt.Robot;
 import java.awt.event.InputEvent;
+import java.awt.image.BufferedImage;
 import java.awt.image.DataBuffer;
 import java.util.concurrent.TimeUnit;
 
@@ -32,32 +33,79 @@ import java.util.concurrent.TimeUnit;
  * @since 6/19/2015
  */
 public final class Effector {
-	static final Rectangle GAME_BOARD_RECT = new Rectangle(300, 143, 699, 612);
+	private static final int TILE_X_ORIGIN = 300, TILE_Y_ORIGIN = 143;
+	private static final int TILE_X_STRIDE = 88, TILE_Y_STRIDE = 88;
+	//offset of the sense-point
+	private static final int TILE_X_OFFSET = 0, TILE_Y_OFFSET = 12;
+	private static final int ROWS = 7, COLS = 8;
+//	static final Rectangle GAME_BOARD_RECT = new Rectangle(300, 143, 699, 612);
 	private final Robot robot;
 	private final Rectangle gameRect;
-	private final Rectangle boardRect;
 	public Effector() throws AWTException {
 		this.robot = new Robot();
 		this.gameRect = Window.findWindowByTitle("10000000").getClientAreaScreenCoordinates();
-		this.boardRect = new Rectangle(GAME_BOARD_RECT);
-		//convert to screen coordinates
-		boardRect.translate(gameRect.x, gameRect.y);
 	}
 
-	public DataBuffer senseBoardRect() {
-		//really we should pass in the rect to be grabbed, but that would
-		//require converting to screen coordinates on each grab
-		return robot.createScreenCapture(boardRect).getRaster().getDataBuffer();
+	public Sensation sense() {
+		return new Sensation(robot.createScreenCapture(gameRect));
 	}
 
-	public void move(int srcX, int srcY, int dstX, int dstY) {
-		robot.mouseMove(srcX + gameRect.x + 10, srcY + gameRect.y + 10);
+	public void move(int srcRow, int srcCol, int dstRow, int dstCol) {
+		//add gameRect base to translate to screen coordinates
+		int srcX = xForCol(srcCol) + gameRect.x, srcY = yForRow(srcRow) + gameRect.y;
+		int dstX = xForCol(dstCol) + gameRect.x, dstY = yForRow(dstRow) + gameRect.y;
+		robot.mouseMove(srcX + 10, srcY + 10);
 		Uninterruptibles.sleepUninterruptibly(50, TimeUnit.MILLISECONDS);
 		robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);
 		Uninterruptibles.sleepUninterruptibly(50, TimeUnit.MILLISECONDS);
-		robot.mouseMove(dstX + gameRect.x + 10, dstY + gameRect.y + 10);
+		robot.mouseMove(dstX + 10, dstY + 10);
 		Uninterruptibles.sleepUninterruptibly(50, TimeUnit.MILLISECONDS);
 		robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
 		Uninterruptibles.sleepUninterruptibly(50, TimeUnit.MILLISECONDS);
+	}
+
+	private static int yForRow(int r) {
+		return r * TILE_Y_STRIDE + TILE_Y_ORIGIN + TILE_Y_OFFSET;
+	}
+
+	private static int xForCol(int c) {
+		return c * TILE_X_STRIDE + TILE_X_ORIGIN + TILE_X_OFFSET;
+	}
+
+	public static final class Sensation {
+		private final Tile[][] tiles;
+		private Sensation(BufferedImage image) {
+			DataBuffer pixels = image.getRaster().getDataBuffer();
+			this.tiles = new Tile[ROWS][COLS];
+			for (int r = 0; r < ROWS; ++r)
+				for (int c = 0; c < COLS; ++c)
+					tiles[r][c] = Tile.fromColor(pixels.getElem(yForRow(r) * image.getWidth() + xForCol(c)));
+		}
+
+		Sensation(Tile[][] tiles) {
+			this.tiles = tiles;
+		}
+
+		/**
+		 * Returns the tile at the given row and column, or null if not known or
+		 * the given indices are out-of-bounds.
+		 * @param r the row
+		 * @param c the column
+		 * @return the tile at the given row and column, or null if not known or
+		 * the given indices are out-of-bounds
+		 */
+		public Tile tile(int r, int c) {
+			if (r < 0 || r >= tiles.length || c < 0 || c >= tiles.length)
+				return null;
+			return tiles[r][c];
+		}
+
+		/**
+		 * The returned array is owned by this class and must not be modified.
+		 * @return
+		 */
+		public Tile[][] board() {
+			return tiles;
+		}
 	}
 }

@@ -18,8 +18,8 @@
 package com.jeffreybosboom.tenmillionbot;
 
 import com.google.common.util.concurrent.Uninterruptibles;
+import com.jeffreybosboom.tenmillionbot.Effector.Sensation;
 import java.awt.AWTException;
-import java.awt.image.DataBuffer;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
@@ -31,14 +31,11 @@ import java.util.concurrent.TimeUnit;
 public final class Main {
 	public static void main(String[] args) throws AWTException {
 		Effector e = new Effector();
-		Sensor s = new Sensor();
 
 		int retries = 0;
 		while (retries < 200) {
-			DataBuffer image = e.senseBoardRect();
-			Tile[][] board = s.sense(image);
-
-			int[] move = findMove(board);
+			Sensation s = e.sense();
+			int[] move = findMove(s.board());
 			System.out.println(Arrays.toString(move));
 			//no move, or there's already a match waiting to be resolved
 			if (move == null || (move[0] == move[2] && move[1] == move[3])) {
@@ -47,11 +44,7 @@ public final class Main {
 				continue;
 			}
 			retries = 0;
-
-			int[] src = s.tileToPixel(move[0], move[1]), dst = s.tileToPixel(move[2], move[3]);
-			System.out.println(Arrays.toString(src)+" -> "+Arrays.toString(dst));
-			e.move(src[0] + Effector.GAME_BOARD_RECT.x, src[1] + Effector.GAME_BOARD_RECT.y,
-					dst[0] + Effector.GAME_BOARD_RECT.x, dst[1] + Effector.GAME_BOARD_RECT.y);
+			e.move(move[0], move[1], move[2], move[3]);
 		}
 	}
 

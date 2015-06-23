@@ -36,7 +36,7 @@ public final class Main {
 		while (retries < 200) {
 			Sensation s = e.sense();
 			int[] move = findMove(s.board());
-			System.out.println(Arrays.toString(move));
+			System.out.println(Arrays.toString(move) + " " + s.locksDemanded() + ", "+s.attackDemanded());
 			//no move, or there's already a match waiting to be resolved
 			if (move == null || (move[0] == move[2] && move[1] == move[3])) {
 				++retries;

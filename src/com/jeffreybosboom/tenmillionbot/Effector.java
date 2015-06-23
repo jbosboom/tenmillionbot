@@ -33,10 +33,25 @@ import java.util.concurrent.TimeUnit;
  * @since 6/19/2015
  */
 public final class Effector {
+	private static final int RUNNER_X_ORIGIN = 342, RUNNER_Y_ORIGIN = 15;
+	private static final int RUNNER_WIDTH = 955 - RUNNER_X_ORIGIN;
 	private static final int TILE_X_ORIGIN = 300, TILE_Y_ORIGIN = 143;
 	private static final int TILE_X_STRIDE = 88, TILE_Y_STRIDE = 88;
 	//offset of the sense-point
 	private static final int TILE_X_OFFSET = 0, TILE_Y_OFFSET = 12;
+	private static final int DEMAND_X = 286, DEMAND_Y = 5;
+	//the red color of the frame
+	private static final int DEMAND_COLOR = rgb(166, 64, 64);
+	private static final int LOCK_CENTER_COLOR = rgb(55, 53, 40);
+	private static final int LOCK_CENTER_WIDTH = 4, LOCK_CENTER_HEIGHT = 8;
+	private static final int LOCK_BODY_COLOR = rgb(102, 101, 94);
+	private static final int LOCK_BODY_WIDTH = 20, LOCK_BODY_HEIGHT = 16;
+	private static final int LOCK_THICKNESS_ABOVE_CENTER = (LOCK_BODY_HEIGHT - LOCK_CENTER_HEIGHT)/2;
+	//if the lock is open, the bottom of the shackle is this many pixels above
+	//the top row of the lock body
+	private static final int LOCK_OPEN_GAP = 8;
+	//61 for chests, 60 for doors because shrug
+	private static final int LOCK_CENTER_Y_SCAN = 61;
 	private static final int ROWS = 7, COLS = 8;
 //	static final Rectangle GAME_BOARD_RECT = new Rectangle(300, 143, 699, 612);
 	private final Robot robot;
@@ -74,16 +89,17 @@ public final class Effector {
 
 	public static final class Sensation {
 		private final Tile[][] tiles;
+		private final int locksDemanded;
+		private final boolean attackDemanded;
 		private Sensation(BufferedImage image) {
 			DataBuffer pixels = image.getRaster().getDataBuffer();
 			this.tiles = new Tile[ROWS][COLS];
 			for (int r = 0; r < ROWS; ++r)
 				for (int c = 0; c < COLS; ++c)
 					tiles[r][c] = Tile.fromColor(pixels.getElem(yForRow(r) * image.getWidth() + xForCol(c)));
-		}
-
-		Sensation(Tile[][] tiles) {
-			this.tiles = tiles;
+			boolean demand = pixels.getElem(DEMAND_Y * image.getWidth() + DEMAND_X) == DEMAND_COLOR;
+			locksDemanded = demand ? findLocks(image) : 0;
+			attackDemanded = demand && locksDemanded == 0;
 		}
 
 		/**
@@ -101,11 +117,49 @@ public final class Effector {
 		}
 
 		/**
-		 * The returned array is owned by this class and must not be modified.
+		 * The returned array is owned by this class.  Modifying it will affect
+		 * the return values of the {@link #tile(int, int)} method.
 		 * @return
 		 */
 		public Tile[][] board() {
 			return tiles;
 		}
+
+		public int locksDemanded() {
+			return locksDemanded;
+		}
+
+		public boolean attackDemanded() {
+			return attackDemanded;
+		}
+
+		private static int findLocks(BufferedImage image) {
+			DataBuffer pixels = image.getRaster().getDataBuffer();
+			int locks = 0;
+			//TODO: the lock floats in from the top of the screen, so we need to
+			//scan more than just one line
+			next_center: for (int x = RUNNER_X_ORIGIN; x < RUNNER_X_ORIGIN + RUNNER_WIDTH; x += LOCK_CENTER_WIDTH) {
+				if (pixels.getElem(LOCK_CENTER_Y_SCAN * image.getWidth() + x) == LOCK_CENTER_COLOR) {
+					int lockCenterX = x, lockCenterY = LOCK_CENTER_Y_SCAN;
+					//we actually only move up (zero or) one step, but eh
+					while (pixels.getElem((lockCenterY - 1) * image.getWidth() + lockCenterX) == LOCK_CENTER_COLOR)
+						--lockCenterY;
+					while (pixels.getElem(lockCenterY * image.getWidth() + (lockCenterX - 1)) == LOCK_CENTER_COLOR)
+						--lockCenterX;
+					int shackleSearchX = lockCenterX - (LOCK_BODY_WIDTH - LOCK_CENTER_WIDTH)/2, shackleSearchY = lockCenterY - (LOCK_THICKNESS_ABOVE_CENTER + 1);
+					for (int dy = 0; dy < LOCK_OPEN_GAP; ++dy)
+						for (int dx = 0; dx < LOCK_BODY_WIDTH; ++dx)
+							if (pixels.getElem((shackleSearchY - dy) * image.getWidth() + (shackleSearchX + dx)) == LOCK_BODY_COLOR) {
+								++locks;
+								break next_center;
+							}
+				}
+			}
+			return locks;
+		}
+	}
+
+	private static int rgb(int r, int g, int b) {
+		return (((0xFF << 8) | r) << 8 | g) << 8 | b;
 	}
 }

@@ -17,11 +17,16 @@
  */
 package com.jeffreybosboom.tenmillionbot;
 
+import com.google.common.math.IntMath;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.jeffreybosboom.tenmillionbot.Effector.Sensation;
 import java.awt.AWTException;
-import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 
 /**
  *
@@ -35,53 +40,141 @@ public final class Main {
 		int retries = 0;
 		while (retries < 200) {
 			Sensation s = e.sense();
-			int[] move = findMove(s.board());
-			System.out.println(Arrays.toString(move) + " " + s.locksDemanded() + ", "+s.attackDemanded());
+			Optional<Move> m = findMove(s.board(), (matchset) -> {
+				int sword = (int)((matchset & (0xFF << Tile.SWORD.ordinal())) >> Tile.SWORD.ordinal());
+				int staff = (int)((matchset & (0xFF << Tile.STAFF.ordinal())) >> Tile.STAFF.ordinal());
+				int key = (int)((matchset & (0xFF << Tile.KEY.ordinal())) >> Tile.KEY.ordinal());
+				int shield = (int)((matchset & (0xFF << Tile.SHIELD.ordinal())) >> Tile.SHIELD.ordinal());
+				int item = (int)((matchset & (0xFF << Tile.ITEM.ordinal())) >> Tile.ITEM.ordinal());
+				int wood = (int)((matchset & (0xFF << Tile.WOOD.ordinal())) >> Tile.WOOD.ordinal());
+				int stone = (int)((matchset & (0xFF << Tile.STONE.ordinal())) >> Tile.STONE.ordinal());
+				int rainbow = (int)((matchset & (0xFF << Tile.RAINBOW.ordinal())) >> Tile.RAINBOW.ordinal());
+				return s.locksDemanded() > 0 ? lockRank(s, sword, staff, key, shield, item, wood, stone, rainbow) :
+						s.attackDemanded() ? attackRank(s, sword, staff, key, shield, item, wood, stone, rainbow) :
+						resourceRank(s, sword, staff, key, shield, item, wood, stone, rainbow);
+			});
+
+			System.out.println(m + " " + s.locksDemanded() + ", "+s.attackDemanded());
 			//no move, or there's already a match waiting to be resolved
-			if (move == null || (move[0] == move[2] && move[1] == move[3])) {
+			if (!m.isPresent() || m.get().distance() == 0) {
 				++retries;
 				Uninterruptibles.sleepUninterruptibly(17, TimeUnit.MILLISECONDS);
 				continue;
 			}
 			retries = 0;
-			e.move(move[0], move[1], move[2], move[3]);
+			Move move = m.get();
+			if (move.row() != -1)
+				e.move(move.row(), 0, move.row(), move.distance());
+			else
+				e.move(0, move.col(), move.distance(), move.col());
 		}
 	}
 
-	private static int[] findMove(Tile[][] board) {
-		int[] move = horizMatch(board);
-		if (move != null) return move;
-		move = horizMatch(transpose(board));
-		if (move != null) {
-			swap(move, 0, 1);
-			swap(move, 2, 3);
-			return move;
-		}
-		return null;
+	private static int attackRank(Sensation s, int sword, int staff, int key, int shield,
+			int item, int wood, int stone, int rainbow) {
+		return 10 * (sword + staff) + (shield + item + wood + stone + rainbow) - 3*key;
 	}
 
-	private static int[] horizMatch(Tile[][] board) {
+	private static int lockRank(Sensation s, int sword, int staff, int key, int shield,
+			int item, int wood, int stone, int rainbow) {
+		return 10 * Math.max(key, s.locksDemanded())
+				- 3 * Math.min(0, key - s.locksDemanded())
+				+ (shield + item + wood + stone + rainbow)
+				- 3 * (sword + staff);
+	}
+
+	private static int resourceRank(Sensation s, int sword, int staff, int key, int shield,
+			int item, int wood, int stone, int rainbow) {
+		return 10 * (shield + item + wood + stone + rainbow) - 3 * (sword + staff + key);
+	}
+
+	private static Optional<Move> findMove(Tile[][] board, Function<Long, Integer> ranking) {
+		Map<Move, Long> moves = horizMatch(board);
+		Map<Move, Long> transposedMoves = horizMatch(transpose(board));
+		transposedMoves.forEach((k, v) -> {
+			moves.merge(Move.row(k.col(), k.distance()), v, Long::sum);
+		});
+		return moves.keySet().stream().max(Comparator.comparing(ranking.compose(moves::get)));
+	}
+
+	private static Map<Move, Long> horizMatch(Tile[][] board) {
+		Map<Move, Long> moves = new HashMap<>();
 		for (int i = 0; i < board.length; ++i) {
 			for (int j = 0; j < board[i].length - 1; ++j) {
 				if (board[i][j] == null) continue;
 				if ((j + 2) < board[i].length && board[i][j] == board[i][j+2]) {
 					for (int k = 0; k < board.length; ++k)
 						if (board[k][j+1] == board[i][j] || board[k][j+1] == Tile.RAINBOW)
-							return new int[]{k, j+1, i, j+1};
+							moves.merge(Move.col(j+1, IntMath.mod(i-k, board.length)),
+									1L << board[i][j].ordinal() * 8,
+									Long::sum);
 				}
 				if (board[i][j] == board[i][j+1]) {
 					if ((j - 1) >= 0)
 						for (int k = 0; k < board.length; ++k)
 							if (board[k][j-1] == board[i][j] || board[k][j-1] == Tile.RAINBOW)
-								return new int[]{k, j-1, i, j-1};
+								moves.merge(Move.col(j-1, IntMath.mod(i-k, board.length)),
+									1L << board[i][j].ordinal() * 8,
+									Long::sum);
 					if ((j + 2) < board[i].length)
 						for (int k = 0; k < board.length; ++k)
 							if (board[k][j+2] == board[i][j] || board[k][j+2] == Tile.RAINBOW)
-								return new int[]{k, j+2, i, j+2};
+								moves.merge(Move.col(j+2, IntMath.mod(i-k, board.length)),
+									1L << board[i][j].ordinal() * 8,
+									Long::sum);
 				}
 			}
 		}
-		return null;
+		return moves;
+	}
+
+	private static final class Move {
+		private final int rowcol, distance;
+		private Move(int rowcol, int dist) {
+			this.rowcol = rowcol;
+			this.distance = dist;
+		}
+		private static Move row(int row, int dist) {
+			return new Move(row, dist);
+		}
+		private static Move col(int col, int dist) {
+			return new Move(-col-1, dist);
+		}
+		public int row() {
+			return rowcol >= 0 ? rowcol : -1;
+		}
+		public int col() {
+			return rowcol < 0 ? -(rowcol + 1) : -1;
+		}
+		public int distance() {
+			return distance;
+		}
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			final Move other = (Move)obj;
+			if (this.rowcol != other.rowcol)
+				return false;
+			if (this.distance != other.distance)
+				return false;
+			return true;
+		}
+		@Override
+		public int hashCode() {
+			int hash = 5;
+			hash = 89 * hash + this.rowcol;
+			hash = 89 * hash + this.distance;
+			return hash;
+		}
+		@Override
+		public String toString() {
+			if (row() != -1)
+				return String.format("row %d by %d", row(), distance());
+			return String.format("col %d by %d", col(), distance());
+		}
 	}
 
 	private static Tile[][] transpose(Tile[][] input) {
@@ -90,11 +183,5 @@ public final class Main {
 			for (int j = 0; j < input[i].length; ++j)
 				output[j][i] = input[i][j];
 		return output;
-	}
-
-	private static void swap(int[] array, int i, int j) {
-		int t = array[i];
-		array[i] = array[j];
-		array[j] = t;
 	}
 }
